@@ -11,6 +11,7 @@ import (
 
 	"github.com/ayan-sh03/triviagenious-backend/config"
 	"github.com/ayan-sh03/triviagenious-backend/internal/api/models"
+	query "github.com/ayan-sh03/triviagenious-backend/internal/api/quiz/sql"
 	"github.com/ayan-sh03/triviagenious-backend/internal/util"
 	"github.com/gorilla/mux"
 )
@@ -45,15 +46,15 @@ func CreateQuiz(w http.ResponseWriter, r *http.Request) {
 
 	var quiz models.Quiz
 
-	// var iderr error
+	var iderr error
 
-	// quiz.AuthorID, iderr = GetUserIDFromCookie(r)
+	quiz.AuthorID, iderr = GetUserIDFromCookie(r)
 
-	// log.Printf("ID from cookie", quiz.AuthorID)
+	log.Print("ID from cookie", quiz.AuthorID)
 
-	// if iderr != nil {
-	// 	log.Fatal(iderr)
-	// }
+	if iderr != nil {
+		log.Fatal(iderr)
+	}
 
 	jsonData, err := io.ReadAll(r.Body)
 	if err != nil {
@@ -70,80 +71,29 @@ func CreateQuiz(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Printf("%+v\n", quiz.Participants)
+	fmt.Println(quiz)
+
+	// fmt.Printf("%+v\n", quiz.Participants)
 	fmt.Printf("%+v\n", quiz.Questions)
 
-	dberr := AddQuiz(&quiz)
+	quizId, dberr := query.AddQuiz(&quiz)
 	if dberr != nil {
 		log.Fatal("Failed to add query")
-	}
-}
-
-func AddQuiz(quiz *models.Quiz) error {
-
-	var Db = config.Connect()
-
-	tx := Db.MustBegin()
-	tagsJSON, err := json.Marshal(quiz.Tags)
-	if err != nil {
-		// Handle the error
-		fmt.Println("Error converting tags to JSON:", err)
-		return err
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error "+dberr.Error())
 	}
 
-	// Convert the JSON string to PostgreSQL jsonb format
-	tagsString := string(tagsJSON)
-
-	tx.MustExec("INSERT INTO quizzes (author_id, time_limit, tags, difficulty) VALUES ($1, $2, $3, $4)", quiz.AuthorID, quiz.TimeLimit, tagsString, quiz.Difficulty)
-
-	for _, participant := range quiz.Participants {
-		_, err := tx.Exec("INSERT INTO participant (user_id, score) VALUES ($1, $2)", participant.UserID, participant.Score)
-		if err != nil {
-			// Handle the error
-			fmt.Println("Error inserting participant:", err)
-			tx.Rollback()
-			return err
-		}
-	}
-
-	optionString := ""
-	for _, question := range quiz.Questions {
-		// Convert options for each question to JSON string
-		optionJson, err := json.Marshal(question.Options)
-		if err != nil {
-			// Handle the error
-			fmt.Println("Error converting options to JSON:", err)
-			return err
-		}
-
-		// Convert the JSON string to PostgreSQL jsonb format
-		optionString = string(optionJson)
-
-		// Insert each question with its unique set of options
-		_, err = tx.Exec("INSERT INTO question (description, score, answer, options) VALUES ($1, $2, $3, $4)", question.Description, question.Score, question.Answer, optionString)
-		if err != nil {
-			// Handle the error
-			fmt.Println("Error inserting question:", err)
-			tx.Rollback()
-			return err
-		}
-	}
-
-	err = tx.Commit()
-	if err != nil {
-		return err
-	}
-	return nil
+	util.RespondWithJSON(w, http.StatusOK, map[string]interface{}{"message": "Quiz added successfully", "id": quizId})
 }
 
 func DeleteQuiz(w http.ResponseWriter, r *http.Request) {
 
-	// user_id, err := GetUserIDFromCookie(r)
-	// if err != nil {
-	// 	util.RespondWithError(w, http.StatusUnauthorized, "Cannot retrive ID from cookie")
-	// 	return
-	// }
-	var user_id int32 = 0
+	user_id, err := GetUserIDFromCookie(r)
+	if err != nil {
+		util.RespondWithError(w, http.StatusUnauthorized, "Cannot retrive ID from cookie")
+		return
+	}
+
+	// var user_id int32 = 0
 	var quiz models.Quiz
 
 	vars := mux.Vars(r)
@@ -157,7 +107,7 @@ func DeleteQuiz(w http.ResponseWriter, r *http.Request) {
 
 	tx := config.Connect()
 
-	err := tx.QueryRow("SELECT id,author_id FROM quizzes WHERE id = $1", quizIDStr).
+	err = tx.QueryRow("SELECT id,author_id FROM quizzes WHERE id = $1", quizIDStr).
 		Scan(&quiz.ID, &quiz.AuthorID)
 
 	if err != nil {
@@ -186,4 +136,198 @@ func DeleteQuiz(w http.ResponseWriter, r *http.Request) {
 	}
 
 	util.RespondWithJSON(w, http.StatusNoContent, "Deleted Successfully")
+}
+
+func AddParticipants(w http.ResponseWriter, r *http.Request) {
+
+	// get user id from cookie
+
+	var participant models.Participant
+	var err error
+	participant.UserID, err = GetUserIDFromCookie(r)
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	decoder := json.NewDecoder(r.Body)
+
+	if err := decoder.Decode(&participant); err != nil {
+		util.RespondWithError(w, http.StatusBadRequest, "Incomplete Request Body")
+		return
+	}
+
+	//validation
+	if participant.QuizID == 0 {
+		util.RespondWithError(w, http.StatusBadRequest, "No Quiz id in the Request Body ")
+		return
+	}
+
+	//!
+
+	fmt.Println(participant)
+
+	err = query.AddParticipant(&participant)
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error While Adding Participant")
+		return
+	}
+
+	util.RespondWithJSON(w, http.StatusCreated, map[string]string{"message": "Added Participant Successfully"})
+}
+
+func UpdateParticipantScore(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	participantIDStr, ok := vars["participantID"]
+
+	var score int32
+
+	decoder := json.NewDecoder(r.Body)
+
+	if err := decoder.Decode(&score); err != nil {
+		util.RespondWithError(w, http.StatusBadRequest, "Provide Updated Score! ")
+		return
+	}
+
+	if !ok {
+		util.RespondWithError(w, http.StatusBadRequest, "Invalid Participant Id")
+		return
+	}
+
+	participantId, err := strconv.Atoi(participantIDStr)
+
+	if err != nil {
+		log.Fatal("Unable to Convert string to int")
+	}
+
+	err = query.UpdateScore(int32(participantId), score)
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error While Executing Query !")
+		return
+	}
+
+	util.RespondWithJSON(w, http.StatusOK, map[string]string{"message": "Updated Successfully"})
+
+}
+
+func DeleteParticipants(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	partIDStr, quizIdstr := vars["partId"], vars["quizId"]
+
+	partId, err := strconv.Atoi(partIDStr)
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+	quizId, err := strconv.Atoi(quizIdstr)
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error")
+		return
+	}
+
+	err = query.DeleteParticipant(int32(quizId), int32(partId))
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusBadRequest, err.Error())
+	}
+
+	util.RespondWithJSON(w, http.StatusOK, map[string]interface{}{"message": "Deleted Successfully"})
+
+}
+
+func GetQuizById(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	quizIDStr, ok := vars["quizID"]
+
+	if !ok {
+		util.RespondWithError(w, http.StatusBadRequest, "Invalid String in the Url")
+		return
+	}
+
+	quiz_id, err := strconv.Atoi(quizIDStr)
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusBadRequest, "Invalid String in the Url")
+		return
+	}
+
+	quiz, sqlErr := query.GetQuizById(int32(quiz_id))
+
+	if sqlErr != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal server error "+sqlErr.Error())
+		return
+
+	}
+
+	util.RespondWithJSON(w, http.StatusOK, quiz)
+
+}
+
+func AddQuestions(w http.ResponseWriter, r *http.Request) {
+	userId, _ := GetUserIDFromCookie(r)
+
+	vars := mux.Vars(r)
+	quizIdStr, ok := vars["quizId"]
+	if !ok || quizIdStr == "" {
+		util.RespondWithError(w, http.StatusBadRequest, "Missing or empty 'quizId' parameter")
+		return
+	}
+
+	quizId, err := strconv.Atoi(quizIdStr)
+	if err != nil {
+		util.RespondWithError(w, http.StatusBadRequest, "Invalid 'quizId' parameter: "+err.Error())
+		return
+	}
+	if err != nil {
+		util.RespondWithError(w, http.StatusUnauthorized, "Please Login Again")
+
+		return
+	}
+
+	var questions []models.Question
+	decoder := json.NewDecoder(r.Body)
+	err = decoder.Decode(&questions)
+	if err != nil {
+		http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Print the decoded questions
+	for _, q := range questions {
+		fmt.Printf("ID: %d, Description: %s, Answer: %s\n", q.ID, q.Description, q.Answer)
+	}
+
+	err = query.AddQuestions(userId, int32(quizId), questions)
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error "+err.Error())
+		return
+	}
+
+	util.RespondWithJSON(w, http.StatusCreated, map[string]interface{}{"message": "OK", "questions": questions})
+}
+
+func GetAllQuestionsFromQuizId(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	quizIdStr := vars["quizId"]
+
+	quizId, err := strconv.Atoi(quizIdStr)
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error"+err.Error())
+
+	}
+
+	questions, err := query.GetQuestionsById(int32(quizId))
+
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Internal Server Error"+err.Error())
+		return
+	}
+
+	util.RespondWithJSON(w, http.StatusOK, map[string]interface{}{"message": "OK", "questions": questions})
 }

@@ -20,7 +20,7 @@ func ExecuteQuery(text string) string {
 	defer client.Close()
 
 	model := client.GenerativeModel("gemini-pro")
-	resp, err := model.GenerateContent(ctx, genai.Text("Generate Multiple Choice Questions Based on the text below with Answers  "+"\n"+"\n"+text))
+	resp, err := model.GenerateContent(ctx, genai.Text("Generate 10 Multiple Choice Questions Based on the text below with Answers  "+"\n"+"\n"+text))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -43,7 +43,7 @@ func printResponse(resp *genai.GenerateContentResponse) string {
 		}
 	}
 
-	fmt.Println(response)
+	// fmt.Println(response)
 	return response
 
 }

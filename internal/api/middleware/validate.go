@@ -17,7 +17,7 @@ func Auth(next http.Handler) http.Handler {
 
 		userId, err := util.ValidateToken(tokenString)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusUnauthorized)
+			http.Error(w, "Unauthorized: "+err.Error(), http.StatusUnauthorized)
 			return
 		}
 
