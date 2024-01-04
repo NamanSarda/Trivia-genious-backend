@@ -2,7 +2,6 @@ package util
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"strconv"
 	"time"
@@ -28,7 +27,7 @@ type JWTClaim struct {
 // - tokenString: a string representing the generated JWT.
 // - err: an error object indicating any error that occurred during JWT generation.
 func GenerateJWT(email string, id int32) (tokenString string, err error) {
-	fmt.Printf("printing id in generate %v \n", strconv.Itoa(int(id)))
+	// fmt.Printf("printing id in generate %v \n", strconv.Itoa(int(id)))
 
 	expirationTime := time.Now().Add(50 * time.Hour)
 	claims := &JWTClaim{
