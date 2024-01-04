@@ -8,14 +8,9 @@ import (
 	"github.com/ayan-sh03/triviagenious-backend/config"
 	"github.com/ayan-sh03/triviagenious-backend/internal/api/routes"
 	"github.com/gorilla/handlers"
-	"github.com/joho/godotenv"
 )
 
 func Run() {
-	err := godotenv.Load("../../.env")
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
 
 	DB := config.Connect()
 

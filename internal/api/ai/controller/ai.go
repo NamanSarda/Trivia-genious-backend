@@ -1,7 +1,6 @@
 package aicontroller
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/ayan-sh03/triviagenious-backend/internal/util"
@@ -13,16 +12,20 @@ import (
 
 func GetQuestionFromAi(w http.ResponseWriter, r *http.Request) {
 
-	response := util.CopyFileFromRequest(w, r)
+	response, err := util.CopyFileFromRequest(r)
 
-	if response == nil {
+	if err != nil {
 		util.RespondWithError(w, http.StatusInternalServerError, "Error Reading File")
 		return
 	}
 
-	extractedText := util.ExtractTextFromPdf(response.Name())
+	extractedText, err := util.ExtractTextFromPdf(response)
+	if err != nil {
+		util.RespondWithError(w, http.StatusInternalServerError, "Error Extracting Text from  File")
+		return
+	}
 
-	fmt.Println(extractedText)
+	// fmt.Println(extractedText)
 	res := util.ExecuteQuery(extractedText)
 
 	if res == "" {
