@@ -11,12 +11,14 @@ type Quiz struct {
 }
 type Participant struct {
 	ID     int32 `json:"id" db:"id"`
+	QuizID int32 `json:"quiz_id" db:"quiz_id"`
 	UserID int32 `json:"user_id" db:"user_id"`
 	Score  int32 `json:"score" db:"score"`
 }
 
 type Question struct {
 	ID          int32    `json:"id" db:"id"`
+	QuizID      int32    `json:"quiz_id" db:"quiz_id"`
 	Description string   `json:"description" db:"description"`
 	Score       int32    `json:"score" db:"score"`
 	Answer      string   `json:"answer" db:"answer"`

@@ -43,7 +43,7 @@ func printResponse(resp *genai.GenerateContentResponse) string {
 		}
 	}
 
-	fmt.Println(response)
+	// fmt.Println(response)
 	return response
 
 }
